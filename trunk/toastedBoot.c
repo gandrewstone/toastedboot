@@ -286,6 +286,7 @@ void nothing_response(void);
 char gethex(void);
 void puthex(char);
 void flash_led(uint8_t count); //,uint16_t predelay,uint16_t ontime,uint16_t offtime);
+void slow_flash_led(uint8_t count);
 
 /* some variables */
 union address_union {
@@ -315,6 +316,7 @@ uint8_t address_high;
 uint16_t *nResets = RESET_RAM_CUBBY;
 #endif
 uint8_t error_count = 0;
+uint32_t max_time_count = MAX_TIME_COUNT;
 
 
 //#define app_start ((void(*)())0);
@@ -330,66 +332,8 @@ void app_start(void)
   go();
 }
 
-/* main program starts here */
-int main(void)
+void initSerial()
 {
-        const char pgmrId[] = { 0x14,'A','V','R',' ','I','S','P',0x10};
-	uint8_t ch,ch2;
-	uint16_t w;
-#ifdef ADABOOT
-	uint8_t	firstcharzero = 0; 	// lady ada hack - BBR
-#endif
-
-#ifdef WATCHDOG_MODS
-	ch = MCUSR;
-	MCUSR = 0;
-
-        // Turn off the watchdog, so that sketches that turn it on (accidently or deliberately) don't cause the
-        // bootloader to constantly reset itself by accident during sketch download.
-	WDTCSR |= _BV(WDCE) | _BV(WDE);
-	WDTCSR = 0;
-
-#ifdef TOASTED_BOOT
-        // Initialize the reset button counter if it is not already initialized.
-        if ((*nResets < RESET_RAM_MAGIC)||(*nResets > RESET_RAM_MAGIC+10)) *nResets = RESET_RAM_MAGIC;
-        // Increment the reset button counter since we just reset!
-        (*nResets)++;
-	// Check if the WDT was used to reset, in which case we dont bootload and skip straight to the code. woot.
-	if ((! (ch &  _BV(EXTRF)))||((*nResets)-RESET_RAM_MAGIC==2))  // if its a not an external reset or the user double clicked the reset button.
-          {
-            (*nResets)=0;
-	    app_start();  // skip bootloader
-          }
-
-        //For debug of the reset button logic: flash_led(*nResets);
-#else
-	// Check if the WDT was used to reset, in which case we dont bootload and skip straight to the code. woot.
-	if (! (ch &  _BV(EXTRF)))  // if its a not an external reset or the user double clicked the reset button.
-          {
-	    app_start();  // skip bootloader
-          }
-#endif
-
-#else
-	asm volatile("nop\n\t");
-#endif
-
-	/* set pin direction for bootloader pin and enable pullup */
-	/* for ATmega128, two pins need to be initialized */
-#ifdef __AVR_ATmega128__
-	BL_DDR &= ~_BV(BL0);
-	BL_DDR &= ~_BV(BL1);
-	BL_PORT |= _BV(BL0);
-	BL_PORT |= _BV(BL1);
-#else
-	/* We run the bootloader regardless of the state of this pin.  Thus, don't
-	put it in a different state than the other pins.  --DAM, 070709
-	BL_DDR &= ~_BV(BL);
-	BL_PORT |= _BV(BL);
-	*/
-#endif
-
-
 #ifdef __AVR_ATmega128__
 	/* check which UART should be used for booting */
 	if(bit_is_clear(BL_PIN, BL0)) {
@@ -398,26 +342,16 @@ int main(void)
 	else if(bit_is_clear(BL_PIN, BL1)) {
 		bootuart = 2;
 	}
-#endif
-
 	/* check if flash is programmed already, if not start bootloader anyway */
 	if(pgm_read_byte_near(0x0000) != 0xFF) {
 
-#ifdef __AVR_ATmega128__
 		/* no UART was selected, start application */
 		if(!bootuart) {
 			app_start();
 		}
-#else
-		/* check if bootloader pin is set low */
-		/* we don't start this part neither for the m8, nor m168 */
-		//if(bit_is_set(BL_PIN, BL)) {
-		//	app_start();
-		//}
-#endif
+
 	}
 
-#ifdef __AVR_ATmega128__
 	/* no bootuart was selected, default to uart 0 */
 	if(!bootuart) {
 		bootuart = 1;
@@ -471,11 +405,70 @@ int main(void)
 	UCSRC = 0x06;
 	UCSRB = _BV(TXEN)|_BV(RXEN);
 #endif
+}
+
+/* main program starts here */
+int main(void)
+{
+        const char pgmrId[] = { 0x14,'A','V','R',' ','I','S','P',0x10};
+	uint8_t ch,ch2;
+	uint16_t w;
+#ifdef ADABOOT
+	uint8_t	firstcharzero = 0; 	// lady ada hack - BBR
+#endif
+
+#ifdef WATCHDOG_MODS
+	ch = MCUSR;
+	MCUSR = 0;
+
+        // Turn off the watchdog, so that sketches that turn it on (accidently or deliberately) don't cause the
+        // bootloader to constantly reset itself by accident during sketch download.
+	WDTCSR |= _BV(WDCE) | _BV(WDE);
+	WDTCSR = 0;
+
+#ifdef TOASTED_BOOT
+        // Initialize the reset button counter if it is not already initialized.
+        if ((*nResets < RESET_RAM_MAGIC)||(*nResets > RESET_RAM_MAGIC+5)) *nResets = RESET_RAM_MAGIC;
+        // Increment the reset button counter since we just reset!
+        //slow_flash_led(*nResets-RESET_RAM_MAGIC);
+        (*nResets)++;
+#if 0
+	// Check if the WDT was used to reset, in which case we dont bootload and skip straight to the code. woot.
+	if ((! (ch &  _BV(EXTRF)))||((*nResets)-RESET_RAM_MAGIC==2))  // if its a not an external reset or the user double clicked the reset button.
+          {
+	    app_start();  // skip bootloader
+          }
+#endif
+#endif
+
+	// Check if the WDT was used to reset, in which case we dont bootload and skip straight to the code. woot.
+	if (! (ch &  _BV(EXTRF)))  // if its a not an external reset or the user double clicked the reset button.
+          {
+	    app_start();  // skip bootloader
+          }
+#else
+	asm volatile("nop\n\t");
+#endif
+
+	/* set pin direction for bootloader pin and enable pullup */
+	/* for ATmega128, two pins need to be initialized */
+#ifdef __AVR_ATmega128__
+	BL_DDR &= ~_BV(BL0);
+	BL_DDR &= ~_BV(BL1);
+	BL_PORT |= _BV(BL0);
+	BL_PORT |= _BV(BL1);
+#else
+	/* We run the bootloader regardless of the state of this pin.  Thus, don't
+	put it in a different state than the other pins.  --DAM, 070709
+	BL_DDR &= ~_BV(BL);
+	BL_PORT |= _BV(BL);
+	*/
+#endif
+
+        initSerial();
 
 	/* set LED pin as output */
 	LED_DDR |= _BV(LED);
-
-
 
     /* flash onboard LED to signal entering of bootloader                   */
     /* ADABOOT will do two series of flashes. first 4 - signifying ADABOOT  */
@@ -489,10 +482,12 @@ int main(void)
 #endif
 
 #ifdef	ADABOOT
+        _delay_ms(250);
 	flash_led(ADABOOT_VER); //,500,100,80);
 #endif 
 
-#ifdef TOASTED_BOOT
+#ifdef TOASTED_BOOT  /* Your time window to double click the reset button is over */
+        if (*nResets-RESET_RAM_MAGIC==2) max_time_count = (max_time_count<<2) + (max_time_count<<1);  /* Make it a lot longer if double clicked */
         (*nResets)=0;
 #endif
 
@@ -504,7 +499,11 @@ int main(void)
 	/* forever loop */
 	for (;;) {
 
-	if (error_count >= MAX_ERROR_COUNT) app_start();
+	if (error_count >= MAX_ERROR_COUNT)
+          {
+            initSerial();
+            error_count = 0;
+          }
 
 	/* get character from UART */
 	ch = getch();
@@ -553,9 +552,6 @@ int main(void)
 #endif
 		} else {
                   ++error_count;
-                  //			if (++error_count == MAX_ERROR_COUNT)
-                  //				app_start();
-
 		}
 	}
 
@@ -832,15 +828,7 @@ int main(void)
 	/* Get device signature bytes  */
 	else if(ch=='u') {
 		if (getch() == ' ') {
-#if 1
                   putNch(devId,5);
-#else
-			putch(0x14);
-			putch(SIG1);
-			putch(SIG2);
-			putch(SIG3);
-			putch(0x10);
-#endif
 		} else {
                   ++error_count;
 		}
@@ -962,7 +950,7 @@ int main(void)
 	}
 	/* end of monitor */
 #endif
-	else 
+	else   /* Garbled 1st character */
           ++error_count;
 
 	} /* end of forever loop */
@@ -1035,10 +1023,11 @@ void putch(char ch)
 #endif
 }
 
-uint32_t count = 0;
 
 char getch(void)
 {
+uint32_t count = 0;
+
 #ifdef __AVR_ATmega128__
 	if(bootuart == 1) {
 		while(!(UCSR0A & _BV(RXC0)));
@@ -1059,12 +1048,15 @@ char getch(void)
 		/* HACKME:: here is a good place to count times*/
 		count++;
                 //if ((count&((((uint32_t)1) << 4)-1))==0) LED_PORT = LED_PORT ^ _BV(LED);
-                if ((count&255)==0) LED_PORT = LED_PORT |= _BV(LED); //LED_PORT ^ _BV(LED);
-                if ((count&255)==((count>>10)&255)) LED_PORT = LED_PORT &= ~_BV(LED); //LED_PORT ^ _BV(LED);
-		if (count > MAX_TIME_COUNT)
+                if (count>8000)  // Don't start the PWM fade in unless the line has been quiet for awhile
                   {
-                    LED_PORT = LED_PORT &= ~_BV(LED);
-	            app_start();
+                  if ((count&255)==0) LED_PORT = LED_PORT | _BV(LED); //LED_PORT ^ _BV(LED);
+                  if ((count&255)==((count>>10)&255)) LED_PORT = LED_PORT & (~_BV(LED)); //LED_PORT ^ _BV(LED);
+		  if (count > max_time_count)
+                    {
+                      LED_PORT = LED_PORT &= ~_BV(LED);
+	              app_start();
+                    }
                   }
 	}
 #ifdef ADABOOT
@@ -1078,7 +1070,7 @@ char getch(void)
 		/* 20060803 DojoCorp:: Addon coming from the previous Bootloader*/               
 		/* HACKME:: here is a good place to count times*/
 		count++;
-		if (count > MAX_TIME_COUNT)
+		if (count > max_time_count)
 			app_start();
 	}
 	return UDR;
@@ -1149,16 +1141,25 @@ void flash_led2(uint8_t count,uint8_t predelay, uint8_t ontime,uint8_t offtime)
 }
 #endif
 
+void slow_flash_led(uint8_t count)
+{
+	while (count--) {
+		LED_PORT |= _BV(LED);
+		_delay_ms(500);
+		LED_PORT &= ~_BV(LED);
+		_delay_ms(100);
+	}
+}
 
 void flash_led(uint8_t count)
 {
-	_delay_ms(500);
+  //_delay_ms(0);
 	
 	while (count--) {
 		LED_PORT |= _BV(LED);
-		_delay_ms(100);
-		LED_PORT &= ~_BV(LED);
 		_delay_ms(80);
+		LED_PORT &= ~_BV(LED);
+		_delay_ms(50);
 	}
 }
 

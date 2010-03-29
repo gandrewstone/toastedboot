@@ -111,7 +111,7 @@ atmega168_isp: isp
 
 atmega328p: TARGET = atmega328
 atmega328p: MCU_TARGET = atmega328p
-atmega328p: CFLAGS += '-DMAX_TIME_COUNT=((((uint32_t)F_CPU)>>3)+(((uint32_t)F_CPU)>>4))' '-DBAUD_RATE=57600' '-DADABOOT=2' '-DWATCHDOG_MODS' '-DTOASTED_BOOT'
+atmega328p: CFLAGS += '-DMAX_TIME_COUNT=(((uint32_t)F_CPU)>>5)' '-DBAUD_RATE=57600' '-DADABOOT=2' '-DWATCHDOG_MODS' '-DTOASTED_BOOT'
 atmega328p: AVR_FREQ = 16000000L 
 atmega328p: LDSECTION  = --section-start=.text=0x7800
 atmega328p: toastedBoot_328p_16mhz.hex
